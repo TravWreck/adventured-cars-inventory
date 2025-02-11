@@ -1,0 +1,75 @@
+import { useState, useEffect } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { signIn, signOut, useSession } from "next-auth/react";
+import { db } from "@/lib/firebase";
+import { collection, addDoc, getDocs } from "firebase/firestore";
+
+export default function VehicleInventory() {
+    const { data: session } = useSession() || {};
+    const [vehicles, setVehicles] = useState([]);
+    const [vehicle, setVehicle] = useState({ 
+        make: "", model: "", description: "Purchased Vehicle", purchasedDate: "", 
+        licensePlate: "", vin: "", mileage: "", keys: "", totalPurchasedPrice: "", 
+        purchasedFrom: "", lowestPrice: "", askingPrice: "", 
+        lowestPricePercentage: 30, askingPricePercentage: 35, status: "In Stock",
+        soldPrice: "", buyer: "", soldDate: "", employee: "", commission: ""
+    });
+    const [userRole, setUserRole] = useState("admin");
+
+    useEffect(() => {
+        if (session) {
+            setUserRole("admin");
+            fetchVehicles();
+        }
+    }, [session]);
+
+    const fetchVehicles = async () => {
+        const querySnapshot = await getDocs(collection(db, "vehicles"));
+        const vehiclesList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setVehicles(vehiclesList);
+    };
+
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setVehicle((prev) => ({ ...prev, [name]: value }));
+    };
+
+    const handleAddVehicle = async () => {
+        const newVehicle = {
+            ...vehicle,
+            lowestPrice: (vehicle.totalPurchasedPrice * (vehicle.lowestPricePercentage / 100)).toFixed(2),
+            askingPrice: (vehicle.totalPurchasedPrice * (vehicle.askingPricePercentage / 100)).toFixed(2),
+            commission: (vehicle.soldPrice * 0.07).toFixed(2)
+        };
+        await addDoc(collection(db, "vehicles"), newVehicle);
+        fetchVehicles();
+    };
+
+    return (
+        <div className="p-6 space-y-6 bg-[#25424c] min-h-screen text-[#fdf0c2]">
+            <h1 className="text-4xl font-bold text-center text-[#fdf0c2]">Vehicle Inventory</h1>
+            <div className="flex justify-center">
+                {!session ? (
+                    <Button className="bg-[#fdf0c2] hover:bg-[#fffff] text-[#25424c] px-4 py-2 rounded-lg" onClick={() => signIn("discord")}>Login with Discord</Button>
+                ) : (
+                    <div className="text-center">
+                        <p className="text-lg font-semibold">Welcome, {session.user?.name}!</p>
+                        <Button className="bg-red-500 hover:bg-red-700 text-white px-4 py-2 rounded-lg mt-2" onClick={() => signOut()}>Logout</Button>
+                    </div>
+                )}
+            </div>
+
+            {session && userRole === "admin" && (
+                <div className="mt-6 space-y-4">
+                    <h2 className="text-2xl font-semibold">Add a Vehicle</h2>
+                    <Input type="text" name="make" placeholder="Make" onChange={handleInputChange} />
+                    <Input type="text" name="model" placeholder="Model" onChange={handleInputChange} />
+                    <Input type="number" name="totalPurchasedPrice" placeholder="Total Purchased Price" onChange={handleInputChange} />
+                    <Button onClick={handleAddVehicle} className="bg-green-500 hover:bg-green-700 text-white px-4 py-2 rounded-lg">Add Vehicle</Button>
+                </div>
+            )}
+        </div>
+    );
+}
